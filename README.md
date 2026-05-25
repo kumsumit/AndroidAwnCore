@@ -50,6 +50,11 @@ Badge handling uses the fork's important APIs:
 The fork also contributes its manifest `<queries>` and OEM badge permissions, so
 Android 11+ package visibility works for supported launchers.
 
+Badge support checks are cached after the first probe. When debug logging is
+enabled, badge count application, notification badge hooks, support checks, and
+fallback failures are logged through the core logger to help diagnose
+device-specific launcher behavior.
+
 ## Badge Behavior
 
 Badge count is stored locally in shared preferences and mirrored to supported

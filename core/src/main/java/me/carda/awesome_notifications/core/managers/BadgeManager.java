@@ -9,14 +9,20 @@ import android.os.Build;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
 
+import me.carda.awesome_notifications.core.AwesomeNotifications;
 import me.carda.awesome_notifications.core.Definitions;
+import me.carda.awesome_notifications.core.logs.Logger;
+import me.leolin.shortcutbadger.ShortcutBadgeException;
 import me.leolin.shortcutbadger.ShortcutBadger;
 
 public class BadgeManager {
+    private static final String TAG = "BadgeManager";
 
     // ************** SINGLETON PATTERN ***********************
 
     protected static BadgeManager instance;
+    private final Object badgeSupportLock = new Object();
+    private volatile Boolean isBadgeCounterSupported;
 
     protected BadgeManager(){}
 
@@ -40,17 +46,20 @@ public class BadgeManager {
         SharedPreferences.Editor editor = prefs.edit();
 
         editor.putInt(Definitions.BADGE_COUNT, count);
-        if (count == 0) {
-            ShortcutBadger.removeCount(context);
-        } else {
-            ShortcutBadger.applyCount(context, count);
-        }
+        boolean applied = applyShortcutBadgeCount(context, count);
+        logDebug("Global badge count set to " + count + ". ShortcutBadger applied: " + applied);
 
         editor.apply();
     }
 
     public void applyNotificationBadge(Context context, Notification notification, int count) {
-        ShortcutBadger.applyNotification(context, notification, max(count, 0));
+        count = max(count, 0);
+        try {
+            ShortcutBadger.applyNotification(context, notification, count);
+            logDebug("Applied notification badge hook with count " + count);
+        } catch (Exception exception) {
+            logDebug("Notification badge hook failed: " + exception.getMessage());
+        }
     }
 
     public void resetGlobalBadgeCounter(Context context) {
@@ -79,16 +88,7 @@ public class BadgeManager {
     }
 
     boolean isBadgeNumberingAllowed(Context context){
-        try {
-            int currentBadgeCount = getGlobalBadgeCounter(context);
-            if (!ShortcutBadger.isBadgeCounterSupported(context)) {
-                return false;
-            }
-            ShortcutBadger.applyCountOrThrow(context, currentBadgeCount);
-            return true;
-        } catch (Exception ignored) {
-            return false;
-        }
+        return isBadgeCounterSupported(context);
     }
 
     boolean isBadgeAppGloballyAllowed(Context context){
@@ -104,5 +104,64 @@ public class BadgeManager {
                ) &&
                isBadgeAppGloballyAllowed(context) &&
                isBadgeNumberingAllowed(context);
+    }
+
+    private boolean applyShortcutBadgeCount(Context context, int count) {
+        try {
+            if (count == 0) {
+                return ShortcutBadger.removeCount(context);
+            }
+            return ShortcutBadger.applyCount(context, count);
+        } catch (Exception exception) {
+            logDebug("ShortcutBadger apply failed: " + exception.getMessage());
+            return false;
+        }
+    }
+
+    private boolean isBadgeCounterSupported(Context context) {
+        Boolean cachedResult = isBadgeCounterSupported;
+        if (cachedResult != null) {
+            logDebug("Using cached badge counter support: " + cachedResult);
+            return cachedResult;
+        }
+
+        synchronized (badgeSupportLock) {
+            if (isBadgeCounterSupported != null) {
+                logDebug("Using cached badge counter support: " + isBadgeCounterSupported);
+                return isBadgeCounterSupported;
+            }
+
+            int currentBadgeCount = getGlobalBadgeCounter(context);
+            boolean supported = false;
+            try {
+                supported = ShortcutBadger.isBadgeCounterSupported(context);
+                if (supported) {
+                    reapplyBadgeCountOrThrow(context, currentBadgeCount);
+                }
+            } catch (Exception exception) {
+                logDebug("Badge counter support check failed: " + exception.getMessage());
+                supported = false;
+            }
+
+            isBadgeCounterSupported = supported;
+            logDebug("Badge counter support checked: " + supported);
+            return supported;
+        }
+    }
+
+    private void reapplyBadgeCountOrThrow(Context context, int count) throws ShortcutBadgeException {
+        count = max(count, 0);
+        if (count == 0) {
+            ShortcutBadger.removeCountOrThrow(context);
+        } else {
+            ShortcutBadger.applyCountOrThrow(context, count);
+        }
+        logDebug("Reapplied badge count after support check: " + count);
+    }
+
+    private void logDebug(String message) {
+        if (AwesomeNotifications.debug) {
+            Logger.d(TAG, message);
+        }
     }
 }
