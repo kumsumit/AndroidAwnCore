@@ -19,21 +19,20 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
-import android.os.SystemClock;
-import android.support.v4.media.MediaMetadataCompat;
-import android.support.v4.media.session.MediaSessionCompat;
-import android.support.v4.media.session.PlaybackStateCompat;
 import android.text.Spanned;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.OptIn;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.core.app.NotificationCompat;
-import androidx.media.app.NotificationCompat.MediaStyle;
 import androidx.core.app.Person;
 import androidx.core.app.RemoteInput;
 import androidx.core.graphics.drawable.IconCompat;
 import androidx.core.text.HtmlCompat;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.session.MediaSession;
+import androidx.media3.session.MediaStyleNotificationHelper;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -67,6 +66,7 @@ import me.carda.awesome_notifications.core.managers.DefaultsManager;
 import me.carda.awesome_notifications.core.managers.LocalizationManager;
 import me.carda.awesome_notifications.core.managers.PermissionManager;
 import me.carda.awesome_notifications.core.managers.StatusBarManager;
+import me.carda.awesome_notifications.core.media.NotificationMediaSessionPlayer;
 import me.carda.awesome_notifications.core.models.NotificationButtonModel;
 import me.carda.awesome_notifications.core.models.NotificationChannelModel;
 import me.carda.awesome_notifications.core.models.NotificationContentModel;
@@ -90,6 +90,7 @@ class DescendingComparator implements Comparator<String> {
     }
 }
 
+@OptIn(markerClass = UnstableApi.class)
 public class NotificationBuilder {
 
     public static String TAG = "NotificationBuilder";
@@ -99,7 +100,8 @@ public class NotificationBuilder {
     private final BitmapUtils bitmapUtils;
     private final StringUtils stringUtils;
     private final PermissionManager permissionManager;
-    private static MediaSessionCompat mediaSession;
+    private static NotificationMediaSessionPlayer mediaSessionPlayer;
+    private static MediaSession mediaSession;
 
     // *************** DEPENDENCY INJECTION CONSTRUCTOR ***************
 
@@ -410,9 +412,33 @@ public class NotificationBuilder {
         return this;
     }
 
-    public NotificationBuilder setMediaSession(MediaSessionCompat mediaSession) {
+    @UnstableApi
+    public NotificationBuilder ensureMediaSession(Context context) {
+        if (mediaSessionPlayer == null) {
+            mediaSessionPlayer = new NotificationMediaSessionPlayer(context.getApplicationContext());
+        }
+        if (mediaSession == null) {
+            mediaSession = new MediaSession.Builder(context.getApplicationContext(), mediaSessionPlayer)
+                    .setId("PUSH_MEDIA")
+                    .build();
+        }
+        return this;
+    }
+
+    public NotificationBuilder setMediaSession(MediaSession mediaSession) {
         NotificationBuilder.mediaSession = mediaSession;
         return this;
+    }
+
+    public static void releaseMediaSession() {
+        if (mediaSession != null) {
+            mediaSession.release();
+            mediaSession = null;
+        }
+        if (mediaSessionPlayer != null) {
+            mediaSessionPlayer.release();
+            mediaSessionPlayer = null;
+        }
     }
 
     public Intent getLaunchIntent(Context applicationContext){
@@ -1496,6 +1522,7 @@ public class NotificationBuilder {
         return true;
     }
 
+    @UnstableApi
     private Boolean setMediaPlayerLayout(
             Context context,
             NotificationModel notificationModel,
@@ -1526,150 +1553,21 @@ public class NotificationBuilder {
 
         int[] showInCompactView = toIntArray(indexes);
 
-        /*
-         * This fix is to show the notification in Android versions >= 11 in the QuickSettings area.
-         * https://developer.android.com/guide/topics/media/media-controls
-         * https://github.com/rafaelsetragni/awesome_notifications/pull/364
-         */
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q /* Android 10 */) {
-
-            if (mediaSession == null)
-                throw ExceptionFactory
-                        .getInstance()
-                        .createNewAwesomeException(
-                                TAG,
-                                ExceptionCode.CODE_INITIALIZATION_EXCEPTION,
-                                "There is no valid media session available",
-                                ExceptionCode.DETAILED_INSUFFICIENT_REQUIREMENTS);
-
-            MediaMetadataCompat.Builder metadataBuilder = new MediaMetadataCompat.Builder();
-            if (contentModel.title != null) {
-                metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_TITLE, contentModel.title);
-            }
-            if (contentModel.body != null) {
-                metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ARTIST, contentModel.body);
-            }
-            if (contentModel.duration != null) {
-                metadataBuilder.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, contentModel.duration * 1000);
-            }
-            if (contentModel.largeIcon != null || contentModel.bigPicture != null) {
-                Bitmap albumArt = null;
-
-                if (contentModel.bigPicture != null) {
-                    albumArt = bitmapUtils.getBitmapFromSource(
-                            context,
-                            contentModel.bigPicture,
-                            false);
-                }
-                if (albumArt == null && contentModel.largeIcon != null) {
-                    albumArt = bitmapUtils.getBitmapFromSource(
-                            context,
-                            contentModel.largeIcon,
-                            false);
-                }
-
-                if (albumArt != null) {
-                    metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, albumArt);
-                }
-            }
-            mediaSession.setMetadata(metadataBuilder.build());
-
-            // using PlaybackState to update position
-            if (contentModel.progress == null) contentModel.progress = 0f;
-            if (contentModel.playState == null) contentModel.playState = NotificationPlayState.playing;
-            if (contentModel.playbackSpeed == null) contentModel.playbackSpeed = 0f;
-            if (contentModel.duration == null) contentModel.duration = 0;
-
-            PlaybackStateCompat.Builder playbackStateBuilder = new PlaybackStateCompat.Builder()
-                    .setState(
-                            contentModel.playState.rawValue,
-                            (long) (contentModel.progress * contentModel.duration * 10),
-                            contentModel.playbackSpeed,
-                            SystemClock.elapsedRealtime()
-                    );
-
-            /*
-             * add action buttons in Android versions >= 11
-             * https://developer.android.com/media/implement/surfaces/mobile#adding-custom-actions
-             */
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R /* Android 11 */) {
-                for (int i = 0; i < actionButtons.size(); i++) {
-                    NotificationButtonModel b = actionButtons.get(i);
-                    int iconResource = 0;
-                    if (!stringUtils.isNullOrEmpty(b.icon)) {
-                        iconResource = bitmapUtils.getDrawableResourceId(context, b.icon);
-                    }
-                    PlaybackStateCompat.CustomAction.Builder actionBuilder = new PlaybackStateCompat.CustomAction.Builder(
-                            b.key, // action ID
-                            b.label, // title - used as content description for the button
-                            iconResource // icon
-                    );
-                    // put button properties into extras
-                    Bundle extras = new Bundle();
-                    extras.putBoolean(Definitions.NOTIFICATION_ENABLED, b.enabled);
-                    extras.putBoolean(Definitions.NOTIFICATION_AUTO_DISMISSIBLE, b.autoDismissible);
-                    extras.putBoolean(Definitions.NOTIFICATION_SHOW_IN_COMPACT_VIEW, b.showInCompactView);
-                    extras.putString(Definitions.NOTIFICATION_ACTION_TYPE, b.actionType.getSafeName());
-                    actionBuilder.setExtras(extras);
-                    playbackStateBuilder.addCustomAction(actionBuilder.build());
-                }
-                // add callback for custom action
-                MediaSessionCompat.Callback callback = new MediaSessionCompat.Callback() {
-                    @Override
-                    public void onCustomAction(String action, Bundle extras) {
-                        super.onCustomAction(action, extras);
-                        boolean enabled = extras.getBoolean(Definitions.NOTIFICATION_ENABLED);
-                        boolean autoDismissible = extras.getBoolean(Definitions.NOTIFICATION_AUTO_DISMISSIBLE);
-                        boolean isAuthenticationRequired = extras.getBoolean(Definitions.NOTIFICATION_AUTHENTICATION_REQUIRED);
-                        boolean showInCompactView = extras.getBoolean(Definitions.NOTIFICATION_SHOW_IN_COMPACT_VIEW);
-                        ActionType actionType = ActionType.getSafeEnum(extras.getString(Definitions.NOTIFICATION_ACTION_TYPE));
-                        Intent actionIntent = buildNotificationIntentFromNotificationModel(
-                                context,
-                                originalIntent,
-                                Definitions.NOTIFICATION_BUTTON_ACTION_PREFIX + "_" + action,
-                                notificationModel,
-                                channel,
-                                actionType,
-                                actionType == ActionType.Default ?
-                                        getMainTargetClass(context):
-                                        AwesomeNotifications.actionReceiverClass
-                        );
-
-                        if (actionType == ActionType.Default)
-                            actionIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-
-                        actionIntent.putExtra(Definitions.NOTIFICATION_AUTO_DISMISSIBLE, autoDismissible);
-                        actionIntent.putExtra(Definitions.NOTIFICATION_AUTHENTICATION_REQUIRED, isAuthenticationRequired);
-                        actionIntent.putExtra(Definitions.NOTIFICATION_SHOW_IN_COMPACT_VIEW, showInCompactView);
-                        actionIntent.putExtra(Definitions.NOTIFICATION_ENABLED, enabled);
-                        actionIntent.putExtra(Definitions.NOTIFICATION_BUTTON_KEY, action); // we use button's key as action, so action is the key
-                        actionIntent.putExtra(
-                                Definitions.NOTIFICATION_ACTION_TYPE,
-                                actionType == null
-                                        ? ActionType.Default.getSafeName()
-                                        : actionType.getSafeName());
-
-                        if (actionType != null && enabled) {
-                            if (actionType == ActionType.Default) {
-                                context.startActivity(actionIntent);
-                            } else {
-                                context.sendBroadcast(actionIntent);
-
-                            }
-                        }
-                    }
-                };
-                mediaSession.setCallback(callback);
-            }
-
-            mediaSession.setPlaybackState(playbackStateBuilder.build());
+        ensureMediaSession(context);
+        if (mediaSession == null || mediaSessionPlayer == null) {
+            throw ExceptionFactory
+                    .getInstance()
+                    .createNewAwesomeException(
+                            TAG,
+                            ExceptionCode.CODE_INITIALIZATION_EXCEPTION,
+                            "There is no valid media session available",
+                            ExceptionCode.DETAILED_INSUFFICIENT_REQUIREMENTS);
         }
+        mediaSessionPlayer.update(contentModel);
 
         builder.setStyle(
-                new MediaStyle()
-                        .setMediaSession(mediaSession.getSessionToken())
-                        .setShowActionsInCompactView(showInCompactView)
-                        .setShowCancelButton(true));
+                new MediaStyleNotificationHelper.MediaStyle(mediaSession)
+                        .setShowActionsInCompactView(showInCompactView));
 
         if (!stringUtils.isNullOrEmpty(contentModel.summary))
             builder.setSubText(contentModel.summary);

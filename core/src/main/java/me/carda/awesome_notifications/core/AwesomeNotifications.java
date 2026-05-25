@@ -4,10 +4,11 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
-import android.support.v4.media.session.MediaSessionCompat;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.OptIn;
 import androidx.annotation.Nullable;
+import androidx.media3.common.util.UnstableApi;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -91,6 +92,7 @@ public class AwesomeNotifications
 
     // ************************** CONSTRUCTOR ***********************************
 
+    @OptIn(markerClass = UnstableApi.class)
     public AwesomeNotifications(@NonNull Context applicationContext)
             throws AwesomeNotificationsException {
 
@@ -109,10 +111,7 @@ public class AwesomeNotifications
         NotificationBuilder
             .getNewBuilder()
             .updateMainTargetClassName(applicationContext)
-            .setMediaSession(
-                    new MediaSessionCompat(
-                            applicationContext,
-                            "PUSH_MEDIA"));
+            .ensureMediaSession(applicationContext);
     }
 
     private boolean isTheMainInstance = false;
@@ -153,6 +152,7 @@ public class AwesomeNotifications
         LifeCycleManager
                 .getInstance()
                 .unsubscribe(this);
+        NotificationBuilder.releaseMediaSession();
     }
 
     // ******************** INITIALIZATION METHOD ***************************
