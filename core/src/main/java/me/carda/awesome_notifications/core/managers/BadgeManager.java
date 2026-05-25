@@ -2,6 +2,7 @@ package me.carda.awesome_notifications.core.managers;
 
 import static java.lang.Math.max;
 
+import android.app.Notification;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
@@ -34,13 +35,22 @@ public class BadgeManager {
     }
 
     public void setGlobalBadgeCounter(Context context, int count) {
+        count = max(count, 0);
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
         SharedPreferences.Editor editor = prefs.edit();
 
         editor.putInt(Definitions.BADGE_COUNT, count);
-        ShortcutBadger.applyCount(context, count);
+        if (count == 0) {
+            ShortcutBadger.removeCount(context);
+        } else {
+            ShortcutBadger.applyCount(context, count);
+        }
 
         editor.apply();
+    }
+
+    public void applyNotificationBadge(Context context, Notification notification, int count) {
+        ShortcutBadger.applyNotification(context, notification, max(count, 0));
     }
 
     public void resetGlobalBadgeCounter(Context context) {
@@ -71,6 +81,9 @@ public class BadgeManager {
     boolean isBadgeNumberingAllowed(Context context){
         try {
             int currentBadgeCount = getGlobalBadgeCounter(context);
+            if (!ShortcutBadger.isBadgeCounterSupported(context)) {
+                return false;
+            }
             ShortcutBadger.applyCountOrThrow(context, currentBadgeCount);
             return true;
         } catch (Exception ignored) {
@@ -85,8 +98,11 @@ public class BadgeManager {
     }
 
     public boolean isBadgeGloballyAllowed(Context context){
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.N /*Android 7*/ ||
-               isBadgeDeviceGloballyAllowed(context) &&
-               isBadgeAppGloballyAllowed(context);
+        return (
+                    Build.VERSION.SDK_INT < Build.VERSION_CODES.N /*Android 7*/ ||
+                    isBadgeDeviceGloballyAllowed(context)
+               ) &&
+               isBadgeAppGloballyAllowed(context) &&
+               isBadgeNumberingAllowed(context);
     }
 }

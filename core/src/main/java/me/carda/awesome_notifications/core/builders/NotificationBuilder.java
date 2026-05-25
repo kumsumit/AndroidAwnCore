@@ -198,17 +198,20 @@ public class NotificationBuilder {
                     channelModel,
                     notificationModel);
 
+        setWakeUpScreen(context, notificationModel);
+        setCriticalAlert(context, channelModel);
+
+        Integer badgeCount = setBadge(context, notificationModel, channelModel, builder);
+
         Notification androidNotification = builder.build();
         if(androidNotification.extras == null)
             androidNotification.extras = new Bundle();
 
         updateTrackingExtras(notificationModel, channelModel, androidNotification.extras);
-
-        setWakeUpScreen(context, notificationModel);
-        setCriticalAlert(context, channelModel);
         setCategoryFlags(context, notificationModel, androidNotification);
-
-        setBadge(context, notificationModel, channelModel, builder);
+        if (badgeCount != null) {
+            BadgeManager.getInstance().applyNotificationBadge(context, androidNotification, badgeCount);
+        }
 
         return androidNotification;
     }
@@ -811,15 +814,18 @@ public class NotificationBuilder {
         builder.setTicker(tickerValue);
     }
 
-    private void setBadge(Context context, NotificationModel notificationModel, NotificationChannelModel channelModel, NotificationCompat.Builder builder) {
+    private Integer setBadge(Context context, NotificationModel notificationModel, NotificationChannelModel channelModel, NotificationCompat.Builder builder) {
         if (notificationModel.content.badge != null){
             BadgeManager.getInstance().setGlobalBadgeCounter(context, notificationModel.content.badge);
-            return;
+            builder.setNumber(Math.max(0, notificationModel.content.badge));
+            return Math.max(0, notificationModel.content.badge);
         }
         if (!notificationModel.groupSummary && BooleanUtils.getInstance().getValue(channelModel.channelShowBadge)) {
-            BadgeManager.getInstance().incrementGlobalBadgeCounter(context);
+            int badgeCount = BadgeManager.getInstance().incrementGlobalBadgeCounter(context);
             builder.setNumber(1);
+            return badgeCount;
         }
+        return null;
     }
 
     private void setAutoCancel(NotificationModel notificationModel, NotificationCompat.Builder builder) {
