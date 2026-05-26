@@ -647,6 +647,7 @@ public class NotificationBuilder {
         setTicker(notificationModel, builder);
         setOnlyAlertOnce(notificationModel, channel, builder);
         setLockedNotification(notificationModel, channel, builder);
+        setPromotedOngoing(notificationModel, builder);
         setImportance(channel, builder);
         setCategory(notificationModel, builder);
         setChronometer(notificationModel, builder);
@@ -742,7 +743,9 @@ public class NotificationBuilder {
         Integer bgColorValue;
         bgColorValue = IntegerUtils.extractInteger(notificationModel.content.backgroundColor, null);
         if (bgColorValue != null) {
-            builder.setColorized(true);
+            boolean isPromotedOngoing =
+                    BooleanUtils.getInstance().getValue(notificationModel.content.requestPromotedOngoing);
+            builder.setColorized(!isPromotedOngoing);
         } else {
             bgColorValue = getLayoutColor(notificationModel, channel);
         }
@@ -803,6 +806,20 @@ public class NotificationBuilder {
             boolean lockedValue = BooleanUtils.getInstance().getValueOrDefault(notificationModel.content.locked, true);
             builder.setOngoing(lockedValue);
         }
+    }
+
+    private void setPromotedOngoing(NotificationModel notificationModel, NotificationCompat.Builder builder) {
+        boolean requestPromotedOngoing =
+                BooleanUtils.getInstance().getValue(notificationModel.content.requestPromotedOngoing);
+
+        if (!requestPromotedOngoing || notificationModel.groupSummary) return;
+
+        builder.setOngoing(true);
+        builder.setRequestPromotedOngoing(true);
+
+        String shortCriticalText = notificationModel.content.shortCriticalText;
+        if (!stringUtils.isNullOrEmpty(shortCriticalText))
+            builder.setShortCriticalText(shortCriticalText);
     }
 
     private void setTicker(NotificationModel notificationModel, NotificationCompat.Builder builder) {

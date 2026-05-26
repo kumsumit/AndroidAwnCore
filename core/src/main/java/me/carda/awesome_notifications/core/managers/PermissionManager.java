@@ -143,6 +143,9 @@ public class PermissionManager {
             case Badge:
                 return BadgeManager.getInstance().isBadgeGloballyAllowed(context);
 
+            case PromotedNotifications:
+                return canPostPromotedNotifications(context);
+
             case OverrideDnD:
                 return isDndOverrideAllowed(context);
 
@@ -170,6 +173,15 @@ public class PermissionManager {
             return true;
 
         return ContextCompat.checkSelfPermission(context, permissionCode) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    public boolean canPostPromotedNotifications(Context context){
+        if (Build.VERSION.SDK_INT < 36) return true;
+
+        NotificationManager notificationManager =
+                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+
+        return notificationManager == null || notificationManager.canPostPromotedNotifications();
     }
 
     @RequiresApi(api = Build.VERSION_CODES.N)
@@ -248,6 +260,9 @@ public class PermissionManager {
                     case CriticalAlert:
                         return channel.canBypassDnd();
 
+                    case PromotedNotifications:
+                        return channel.getImportance() > NotificationManager.IMPORTANCE_MIN;
+
                     case PreciseAlarms:
                     default:
                         return true;
@@ -291,6 +306,9 @@ public class PermissionManager {
 
                     case CriticalAlert:
                         return channelModel.criticalAlerts;
+
+                    case PromotedNotifications:
+                        return channelModel.importance.ordinal() > NotificationImportance.Min.ordinal();
 
                     case PreciseAlarms:
                     default:
@@ -435,9 +453,12 @@ public class PermissionManager {
                     break;
 
                 case FullScreenIntent:
+                case PromotedNotifications:
                 case Car:
                 default:
-                    success = gotoAndroidAppNotificationPage(context);
+                    success = permissionEnum == NotificationPermission.PromotedNotifications ?
+                            gotoAndroidPromotedNotificationsPage(context) :
+                            gotoAndroidAppNotificationPage(context);
             }
 
         if(success)
@@ -548,6 +569,7 @@ public class PermissionManager {
             case Provisional:
             case PreciseAlarms:
             case FullScreenIntent:
+            case PromotedNotifications:
             case Car:
                 break;
         }
@@ -584,6 +606,7 @@ public class PermissionManager {
             case Sound:
             case CriticalAlert:
             case Provisional:
+            case PromotedNotifications:
             case Car:
             default:
                 return null;
@@ -699,6 +722,22 @@ public class PermissionManager {
             intent.setAction(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
             intent.putExtra(Settings.EXTRA_APP_PACKAGE, AwesomeNotifications.getPackageName(context));
             intent.setData(Uri.parse("package:" + AwesomeNotifications.getPackageName(context)));
+
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            if(startVerifiedActivity(context, intent))
+                return true;
+        }
+        return gotoAndroidAppNotificationPage(context);
+    }
+
+    private boolean gotoAndroidPromotedNotificationsPage(
+            @NonNull final Context context
+    ){
+        if (Build.VERSION.SDK_INT >= 36) {
+            final Intent intent = new Intent();
+
+            intent.setAction(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS);
+            intent.putExtra(Settings.EXTRA_APP_PACKAGE, AwesomeNotifications.getPackageName(context));
 
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             if(startVerifiedActivity(context, intent))

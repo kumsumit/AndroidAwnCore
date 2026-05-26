@@ -65,6 +65,10 @@ public class NotificationContentModel extends AbstractModel {
 
     public Boolean locked;
 
+    public Boolean requestPromotedOngoing;
+
+    public String shortCriticalText;
+
     public String bigPicture;
 
     public Boolean wakeUpScreen;
@@ -179,6 +183,8 @@ public class NotificationContentModel extends AbstractModel {
         fullScreenIntent      = getValueOrDefault(arguments, Definitions.NOTIFICATION_FULL_SCREEN_INTENT, Boolean.class, false);
         showWhen              = getValueOrDefault(arguments, Definitions.NOTIFICATION_SHOW_WHEN, Boolean.class, true);
         locked                = getValueOrDefault(arguments, Definitions.NOTIFICATION_LOCKED, Boolean.class, false);
+        requestPromotedOngoing = getValueOrDefault(arguments, Definitions.NOTIFICATION_REQUEST_PROMOTED_ONGOING, Boolean.class, false);
+        shortCriticalText     = getValueOrDefault(arguments, Definitions.NOTIFICATION_SHORT_CRITICAL_TEXT, String.class, null);
         displayOnForeground   = getValueOrDefault(arguments, Definitions.NOTIFICATION_DISPLAY_ON_FOREGROUND, Boolean.class, true);
         displayOnBackground   = getValueOrDefault(arguments, Definitions.NOTIFICATION_DISPLAY_ON_BACKGROUND, Boolean.class, true);
         hideLargeIconOnExpand = getValueOrDefault(arguments, Definitions.NOTIFICATION_HIDE_LARGE_ICON_ON_EXPAND, Boolean.class, false);
@@ -243,6 +249,8 @@ public class NotificationContentModel extends AbstractModel {
         putDataOnSerializedMap(Definitions.NOTIFICATION_FULL_SCREEN_INTENT, returnedObject, this.fullScreenIntent);
         putDataOnSerializedMap(Definitions.NOTIFICATION_ACTION_TYPE, returnedObject, this.actionType);
         putDataOnSerializedMap(Definitions.NOTIFICATION_LOCKED, returnedObject, this.locked);
+        putDataOnSerializedMap(Definitions.NOTIFICATION_REQUEST_PROMOTED_ONGOING, returnedObject, this.requestPromotedOngoing);
+        putDataOnSerializedMap(Definitions.NOTIFICATION_SHORT_CRITICAL_TEXT, returnedObject, this.shortCriticalText);
         putDataOnSerializedMap(Definitions.NOTIFICATION_PLAY_SOUND, returnedObject, this.playSound);
         putDataOnSerializedMap(Definitions.NOTIFICATION_CUSTOM_SOUND, returnedObject, this.customSound);
         putDataOnSerializedMap(Definitions.NOTIFICATION_TICKER, returnedObject, this.ticker);

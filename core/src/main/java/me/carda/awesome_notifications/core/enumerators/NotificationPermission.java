@@ -43,6 +43,7 @@ public enum NotificationPermission implements SafeEnum {
      */
     Provisional("Provisional"),
 
+    PromotedNotifications("PromotedNotifications"),
     PreciseAlarms("PreciseAlarms"),
     FullScreenIntent("FullScreenIntent"),
     /**
@@ -86,6 +87,7 @@ public enum NotificationPermission implements SafeEnum {
             return Vibration;
         }
         if (SafeEnum.charMatches(reference, stringLength, 0, 'p')){
+            if (SafeEnum.charMatches(reference, stringLength, 3, 'm')) return PromotedNotifications;
             if (SafeEnum.charMatches(reference, stringLength, 2, 'e')) return PreciseAlarms;
             return Provisional;
         }
